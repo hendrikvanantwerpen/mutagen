@@ -1,0 +1,19 @@
+{
+  "name": "@nuanced-dev/mutagen-linux-x64",
+  "version": "0.19.0-dev.0",
+  "description": "Mutagen binary for Linux x64",
+  "type": "module",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nuanced-dev/mutagen.git"
+  },
+  "license": "MIT",
+  "files": [
+    "bin/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
