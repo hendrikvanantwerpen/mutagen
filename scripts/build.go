@@ -166,6 +166,20 @@ func (t Target) BuildBundleInReleaseSlimMode() bool {
 		(t.GOOS == "linux" && t.GOARCH == "amd64")
 }
 
+// IncludeAgentInReleaseTinyMode indicates whether or not the target should have
+// an agent binary included in the agent bundle in release-tiny mode.
+func (t Target) IncludeAgentInReleaseTinyMode() bool {
+	return t.GOOS == "linux" && (t.GOARCH == "amd64" || t.GOARCH == "arm64")
+}
+
+// BuildBundleInReleaseTinyMode indicates whether or not the target should have
+// a release bundle built in release-tiny mode.
+func (t Target) BuildBundleInReleaseTinyMode() bool {
+	return (t.GOOS == "darwin" && (t.GOARCH == "amd64" || t.GOARCH == "arm64")) ||
+		(t.GOOS == "linux" && (t.GOARCH == "amd64" || t.GOARCH == "arm64")) ||
+		(t.GOOS == "windows" && (t.GOARCH == "amd64" || t.GOARCH == "arm64"))
+}
+
 // Build executes a module-aware build of the specified package URL, storing the
 // output of the build at the specified path.
 func (t Target) Build(url, output string, enableSSPLEnhancements, disableDebug bool) error {
@@ -511,13 +525,14 @@ func copyFile(sourcePath, destinationPath string) error {
 var usage = `usage: build [-h|--help] [-m|--mode=<mode>] [--sspl]
        [--macos-codesign-identity=<identity>]
 
-The mode flag accepts four values: 'local', 'slim', 'release', and
-'release-slim'. 'local' will build CLI and agent binaries only for the current
-platform. 'slim' will build the CLI binary for only the current platform and
-agents for a common subset of platforms. 'release' will build CLI and agent
+The mode flag accepts five values: 'local', 'slim', 'release', 'release-slim',
+and 'release-tiny'. 'local' will build CLI and agent binaries only for the
+current platform. 'slim' will build the CLI binary for only the current platform
+and agents for a common subset of platforms. 'release' will build CLI and agent
 binaries for all platforms and package for release. 'release-slim' is the same
-as release but only builds release bundles for a small subset of platforms. The
-default mode is 'slim'.
+as release but only builds release bundles for a small subset of platforms.
+'release-tiny' builds release bundles for darwin/linux/windows on amd64/arm64
+and includes agents only for linux on amd64/arm64. The default mode is 'slim'.
 
 If --sspl is specified, then SSPL-licensed enhancements will be included in the
 build output. By default, only MIT-licensed code is included in builds.
@@ -547,7 +562,7 @@ func build() error {
 			return fmt.Errorf("unable to parse command line: %w", err)
 		}
 	}
-	if !(mode == "local" || mode == "slim" || mode == "release" || mode == "release-slim") {
+	if !(mode == "local" || mode == "slim" || mode == "release" || mode == "release-slim" || mode == "release-tiny") {
 		return fmt.Errorf("invalid build mode: %s", mode)
 	}
 
@@ -559,7 +574,7 @@ func build() error {
 	if runtime.GOOS != "darwin" {
 		if mode == "release" {
 			return errors.New("macOS is required for release builds")
-		} else if mode == "slim" || mode == "release-slim" {
+		} else if mode == "slim" || mode == "release-slim" || mode == "release-tiny" {
 			cmd.Warning("macOS agents will be built without cgo support")
 		}
 	}
@@ -606,7 +621,7 @@ func build() error {
 	if err := os.MkdirAll(cliBuildSubdirectoryPath, 0700); err != nil {
 		return fmt.Errorf("unable to create CLI build subdirectory: %w", err)
 	}
-	if mode == "release" || mode == "release-slim" {
+	if mode == "release" || mode == "release-slim" || mode == "release-tiny" {
 		if err := os.MkdirAll(releaseBuildSubdirectoryPath, 0700); err != nil {
 			return fmt.Errorf("unable to create release build subdirectory: %w", err)
 		}
@@ -622,6 +637,8 @@ func build() error {
 			continue
 		} else if (mode == "slim" || mode == "release-slim") && !target.IncludeAgentInSlimBuildModes() {
 			continue
+		} else if mode == "release-tiny" && !target.IncludeAgentInReleaseTinyMode() {
+			continue
 		}
 		agentTargets = append(agentTargets, target)
 	}
@@ -633,13 +650,15 @@ func build() error {
 			continue
 		} else if mode == "release-slim" && !target.BuildBundleInReleaseSlimMode() {
 			continue
+		} else if mode == "release-tiny" && !target.BuildBundleInReleaseTinyMode() {
+			continue
 		}
 		cliTargets = append(cliTargets, target)
 	}
 
 	// Determine whether or not to disable debugging information in binaries.
 	// Doing so saves significant space, but is only suited to release builds.
-	disableDebug := mode == "release" || mode == "release-slim"
+	disableDebug := mode == "release" || mode == "release-slim" || mode == "release-tiny"
 
 	// Build agent binaries.
 	log.Println("Building agent binaries...")
@@ -690,7 +709,7 @@ func build() error {
 	}
 
 	// Build release bundles if necessary.
-	if mode == "release" || mode == "release-slim" {
+	if mode == "release" || mode == "release-slim" || mode == "release-tiny" {
 		log.Println("Building release bundles...")
 		for _, target := range cliTargets {
 			// Update status.
