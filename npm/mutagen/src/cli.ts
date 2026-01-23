@@ -7,7 +7,7 @@ import { MutagenError, mutagenSync } from './index.js';
 
 try {
     const o = mutagenSync(process.argv.slice(2));
-    console.log(o);
+    console.log(o.stdout);
 } catch (e) {
     const me = e as MutagenError;
     console.error(me.stderr);
