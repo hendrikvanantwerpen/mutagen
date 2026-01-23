@@ -3,13 +3,13 @@
 import console from "node:console";
 import process from "node:process";
 
-import { mutagenSync } from './index.js';
+import { MutagenError, mutagenSync } from './index.js';
 
-const result = mutagenSync(process.argv.slice(2), { stdio: 'inherit' });
-
-if (result.error) {
-  console.error(`Failed to execute mutagen: ${result.error.message}`);
-  process.exit(1);
+try {
+    const o = mutagenSync(process.argv.slice(2));
+    console.log(o);
+} catch (e) {
+    const me = e as MutagenError;
+    console.error(me.stderr);
+    process.exitCode = me.exitCode;
 }
-
-process.exit(result.status ?? 0);

@@ -1,20 +1,8 @@
-import { spawnSync } from 'child_process';
-import { spawn } from 'child-process-promise';
+import { spawn, SpawnOptionsWithoutStdio, spawnSync } from 'child_process';
 import { existsSync } from 'fs';
 import { createRequire } from 'module';
 import { platform, arch } from 'os';
 import { join } from 'path';
-
-import type {
-    ChildProcess,
-    SpawnOptions,
-    SpawnSyncOptions,
-    SpawnSyncReturns,
-} from 'child_process';
-import type {
-    ChildProcessPromise,
-    SpawnPromiseResult,
-} from 'child-process-promise';
 
 const require = createRequire(import.meta.filename);
 
@@ -47,26 +35,72 @@ function getPlatformBinary(): string {
     }
 }
 
-/**
- * Execute mutagen asynchronously with the given arguments (uses child-process-promise.spawn).
- *
- * @param args - Command-line arguments to pass to mutagen
- * @param options - Options to pass to child-process-promise.spawn()
- * @returns The spawned child process
- */
-export async function mutagen(args: string[] = [], options: SpawnOptions = {}): Promise<ChildProcessPromise<SpawnPromiseResult>> {
-    const binaryPath = getPlatformBinary();
-    return spawn(binaryPath, args, options);
+interface MutagenOptions {
+    env: Record<string, string>,
 }
 
 /**
- * Execute mutagen synchronously with the given arguments (uses child_process.spawnSync).
+ * Execute mutagen synchronously with the given arguments
  *
  * @param args - Command-line arguments to pass to mutagen
- * @param options - Options to pass to child_process.spawnSync()
- * @returns The result of the synchronous spawn
+ * @param options - Options to pass to the process
+ * @returns A {@link MutagenResult} with the output of the process
+ * @throws A {@link MutagenError} with the exit code and error
  */
-export function mutagenSync(args: string[] = [], options: SpawnSyncOptions = {}): SpawnSyncReturns<Buffer | string> {
+export function mutagenSync(args: string[], options?: MutagenOptions): MutagenResult {
     const binaryPath = getPlatformBinary();
-    return spawnSync(binaryPath, args, options);
+    const res = spawnSync(binaryPath, args, {
+        encoding: "utf8",
+        ...options
+    });
+    if (res.status) {
+        throw new MutagenError(res.status, res.stderr);
+    }
+    return { stdout: res.stdout };
+}
+
+/**
+ * Execute mutagen asynchronously with the given arguments
+ *
+ * @param args - Command-line arguments to pass to mutagen
+ * @param options - Options to pass to the process
+ * @returns A {@link MutagenResult} with the output of the process
+ * @throws A {@link MutagenError} with the exit code and error
+ */
+export async function mutagen(args: string[], options?: MutagenOptions): Promise<MutagenResult> {
+    const binaryPath = getPlatformBinary();
+    return spawnAsync(binaryPath, args, options);
+}
+
+async function spawnAsync(cmd: string, args: string[], options?: SpawnOptionsWithoutStdio): Promise<MutagenResult> {
+    const child = spawn(cmd, args, options);
+
+    let stdout = "";
+    child.stdout.on('data', (data) => stdout += data);
+
+    let stderr = "";
+    child.stderr.on('data', (data) => stderr += data);
+
+    const exitCode: number = await new Promise((resolve, reject) => {
+        child.on('close', resolve);
+    });
+
+    if (exitCode) {
+        throw new MutagenError(exitCode, stderr);
+    }
+
+    return { stdout };
+}
+
+export interface MutagenResult {
+    stdout: string;
+}
+
+export class MutagenError extends Error {
+    constructor(
+        public exitCode: number,
+        public stderr: string,
+    ) {
+        super(`process exited with code ${exitCode}`);
+    }
 }

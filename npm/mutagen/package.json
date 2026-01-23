@@ -1,6 +1,6 @@
 {
   "name": "@nuanced-dev/mutagen",
-  "version": "0.19.0-dev.0",
+  "version": "0.19.0-dev.1",
   "description": "Fast file synchronization and network forwarding for remote development",
   "license": "MIT",
   "author": "Mutagen IO",
